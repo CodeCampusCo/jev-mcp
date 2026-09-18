@@ -40,6 +40,9 @@ Set your key in the environment:
 export TYPESAFE_API_KEY=...
 ```
 
+Two overrides exist and are rarely needed: `TYPESAFE_API_URL` points the server at a different
+endpoint, and `TYPESAFE_DEFAULT_MODEL` changes the model used when a call does not name one.
+
 ## The tool
 
 One tool, `evaluate`. It takes the state to judge and a map of questions, and returns the API's

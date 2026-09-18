@@ -1,0 +1,134 @@
+#!/usr/bin/env node
+/**
+ * An MCP server with one tool, `evaluate`, that forwards a typed question to the
+ * Jev API and hands the response back unchanged.
+ */
+
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { CallToolRequestSchema, ListToolsRequestSchema, type Tool } from "@modelcontextprotocol/sdk/types.js";
+import { callJev, defaultModel } from "./client.js";
+
+const DESCRIPTION = `Ask Jev for a typed judgement about some state, and get it back in roughly 300ms with a calibrated probability attached.
+
+Reach for this mid-task, the way you would read a file, instead of spending a turn reasoning about a bounded question: classifying something, routing between branches, scoring against fixed levels, gating a next step, or checking whether a claim is supported by the text above it.
+
+Do not reach for it for prose, code, a number it would have to compute, or anything whose answer space you cannot enumerate before you ask. Jev writes no text at all. It only chooses — from options you supply (255 at most), from 2-10 ordered levels, or as a probability on a yes/no proposition. It also cannot say "I don't know": forced into a fixed list it will pick something confidently even when nothing fits, so include a "none of these" option whenever one is possible.
+
+Ask several questions in one call whenever you can. They are answered in parallel against the same state, so a question you might not need costs its own tokens and almost no extra time.
+
+Returns the API's JSON response unchanged, with a decision and probabilities under each of your question ids.`;
+
+// Documented here rather than validated: the API is the authority on what a
+// well-formed request is, and its 4xx body tells the caller more than a guess
+// from this side would. These descriptions are the calling agent's only copy of
+// the contract, so keep them accurate.
+const JSON_VALUE_TYPES = ["string", "object", "array"];
+
+const EVALUATE: Tool = {
+    name: "evaluate",
+    description: DESCRIPTION,
+    annotations: {
+        title: "Evaluate with Jev",
+        readOnlyHint: true,
+        openWorldHint: true
+    },
+    inputSchema: {
+        type: "object",
+        properties: {
+            state: {
+                type: JSON_VALUE_TYPES,
+                description:
+                    "The material to judge — a string, or a JSON object or array. Every question is answered against this same state. Accuracy falls as it fills with material the questions do not need, so filter first and send the fields they actually read. Roughly 32k tokens maximum."
+            },
+            questions: {
+                type: "object",
+                minProperties: 1,
+                description:
+                    "Your questions, keyed by ids you choose. The answers come back under the same ids. Note that probabilities are not comparable across questions or across question types — never carry a threshold from one to another.",
+                additionalProperties: {
+                    type: "object",
+                    properties: {
+                        type: {
+                            type: "string",
+                            enum: ["noul", "choice", "score"],
+                            description:
+                                "noul: a yes/no proposition, answered with a probability between 0 and 1. choice: pick one of up to 255 named options, answered with the option, a probability for each, and a confidence. score: rate against 2-10 ordered levels, answered with the level, probabilities, and a confidence."
+                        },
+                        instructions: {
+                            type: JSON_VALUE_TYPES,
+                            description:
+                                "What to decide about the state, as a question or an instruction. A string, or a JSON object or array if the question is easier to state structurally."
+                        },
+                        criteria: {
+                            description:
+                                'What each possible answer means. The shape depends on `type`. noul (optional): {"true": <what makes it true>, "false": <what makes it false>}. choice (REQUIRED): an object mapping each option name to a description, or to null where the name speaks for itself; 255 options maximum. score (REQUIRED): an ordered array of 2-10 level descriptions, lowest level first.'
+                        }
+                    },
+                    required: ["type", "instructions"]
+                }
+            },
+            model: {
+                type: "string",
+                description: `The Jev model to use. Defaults to ${defaultModel}.`
+            }
+        },
+        required: ["state", "questions"]
+    }
+};
+
+function textResult(text: string, isError = false) {
+    return { content: [{ type: "text" as const, text }], isError };
+}
+
+async function main(): Promise<void> {
+    const apiKey = process.env.TYPESAFE_API_KEY;
+    if (!apiKey) {
+        console.error("TYPESAFE_API_KEY is not set. Get a key at https://typesafe.ai and put it in the environment jev-mcp runs in.");
+        process.exit(1);
+    }
+
+    const server = new Server({ name: "jev-mcp", version: "0.1.0" }, { capabilities: { tools: {} } });
+
+    server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: [EVALUATE] }));
+
+    server.setRequestHandler(CallToolRequestSchema, async request => {
+        if (request.params.name !== EVALUATE.name) {
+            throw new Error(`Unknown tool: ${request.params.name}`);
+        }
+
+        const args = (request.params.arguments ?? {}) as Record<string, unknown>;
+
+        // The only two checks. Everything else is the API's to reject.
+        if (args.state === undefined || args.state === null) {
+            return textResult("`state` is required: give Jev the material the questions are about.", true);
+        }
+        const questions = args.questions;
+        if (typeof questions !== "object" || questions === null || Array.isArray(questions) || Object.keys(questions).length === 0) {
+            return textResult("`questions` must be a non-empty object mapping your own question ids to questions.", true);
+        }
+
+        try {
+            const { ok, status, body } = await callJev(apiKey, {
+                model: args.model ?? defaultModel,
+                state: args.state,
+                questions
+            });
+
+            if (!ok) {
+                return textResult(`Jev API error (HTTP ${status}): ${body || "<empty response body>"}`, true);
+            }
+
+            return textResult(body);
+        } catch (error) {
+            return textResult(`Could not reach the Jev API: ${error instanceof Error ? error.message : String(error)}`, true);
+        }
+    });
+
+    await server.connect(new StdioServerTransport());
+}
+
+main().catch(error => {
+    console.error(error);
+    process.exit(1);
+});
