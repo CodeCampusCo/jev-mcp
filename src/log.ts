@@ -109,6 +109,6 @@ function chosenProbability(answer: Answer | undefined): number | undefined {
     if (!answer) return undefined;
     if (answer.type === "noul") return answer.noul;
     if (answer.choice !== undefined) return answer.probabilities?.[answer.choice];
-    const spread = Object.values(answer.probabilities ?? {});
-    return spread.length ? Math.max(...spread) : undefined;
+    if (answer.score !== undefined) return answer.probabilities?.[String(answer.score)];
+    return undefined;
 }
