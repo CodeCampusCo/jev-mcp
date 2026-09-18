@@ -49,6 +49,10 @@ Two overrides exist and are rarely needed, in the environment or in the same fil
 `TYPESAFE_API_URL` points the server at a different endpoint, and `TYPESAFE_DEFAULT_MODEL`
 changes the model used when a call does not name one.
 
+**The model is pinned to a version, not to `jev-latest`**, so probabilities cannot move underneath
+you. The API advertises only the `jev-latest` and `jev-preview` aliases, so if the pinned version is
+ever withdrawn, calls fail with `Unknown model` instead of quietly answering differently.
+
 ## The tool
 
 One tool, `evaluate`. It takes the state to judge and a map of questions, and returns the API's
@@ -107,7 +111,7 @@ whole request.
 
 ## Logging
 
-Optional, and off unless you set it. Put an Axiom ingest token in `AXION_API_KEY` and every call is
+Optional, and off unless you set it. Put an Axiom ingest token in `AXIOM_API_KEY` and every call is
 shipped to the `jev-mcp` dataset. With no token nothing is sent and nothing else changes, so a clone
 does not need an Axiom account.
 

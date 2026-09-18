@@ -6,12 +6,8 @@ const LOG_TIMEOUT_MS = 10_000;
 
 const HOST = hostname();
 
-/**
- * MCP's `initialize` carries no session id, only the client's name and version,
- * so this is the honest substitute: an id for this server process. A stdio
- * server is spawned per client, so one process is one session in practice —
- * but it identifies the process, which is why it is not called a session id.
- */
+// MCP has no session id; this identifies the process. Stdio spawns one server
+// per client, so in practice that is the session.
 const INSTANCE = randomUUID();
 
 let client: { name?: string; version?: string } = {};
@@ -20,12 +16,6 @@ export function setClient(info: { name?: string; version?: string } | undefined)
     client = info ?? {};
 }
 
-/**
- * The request is logged so a call can be replayed from the record; the response
- * body is not. It arrives only to have scalars read off it, so neither it nor an
- * API error body that quotes the caller back is ever shipped — the per-answer
- * rows already carry what a replay compares against.
- */
 export interface CallLog {
     outcome: "ok" | "api_error" | "rejected" | "transport_error";
     startedAt: number;
@@ -49,20 +39,8 @@ export function logCall(call: CallLog): void {
     }
 }
 
-/**
- * Lets writes already in flight finish before the process goes.
- *
- * The MCP client ends stdin, waits 2s, then SIGTERMs, and Node's default action
- * for SIGTERM is to die on the spot. A cold ingest measures ~2.6s from here
- * against ~275ms warm, nearly all of it TLS, so without this the first write of
- * a server that is closed soon after its call never lands — and it fails
- * silently, which is the worst shape for a log to fail in.
- *
- * Only shutdown waits, never a response. The cap sits just inside the 2s the
- * client allows before it escalates to SIGKILL — a cold write can still be
- * running 3s after SIGTERM, so a tighter cap cuts off the write it exists to
- * protect. This makes loss rare, not impossible.
- */
+// SIGTERM would otherwise kill an in-flight write, and a cold ingest takes ~2.6s
+// against ~275ms warm. The cap must stay under the 2s before the client SIGKILLs.
 export async function drain(limitMs = 1900): Promise<void> {
     if (inFlight.size === 0) return;
     await Promise.race([Promise.all(inFlight), new Promise(resolve => setTimeout(resolve, limitMs))]);
@@ -71,7 +49,7 @@ export async function drain(limitMs = 1900): Promise<void> {
 const inFlight = new Set<Promise<void>>();
 
 function send(body: string): void {
-    const token = process.env.AXION_API_KEY;
+    const token = process.env.AXIOM_API_KEY;
     if (!token) return;
 
     const write = fetch(INGEST_URL, {
@@ -108,20 +86,15 @@ function buildEvents(call: CallLog): Record<string, unknown>[] {
         attempts: call.attempts,
         error: call.error,
         question_count: asked.length,
-        // Serialised like everything else: a state is usually an object, and its
-        // field names are the caller's, so nested it would be the widest source
-        // of runaway columns in the dataset.
         state: text(call.state),
         model: parsed?.model,
         input_tokens: parsed?.usage?.input_tokens,
         output_tokens: parsed?.usage?.output_tokens
     };
 
-    // One row per question asked, not per answer returned, so a call the API
-    // rejected still records what was asked of it. The caller's question id is
-    // used to find the answer and then dropped: it is a pointer into a source
-    // the reader of this log does not have, while `instructions` is the question
-    // itself, in words, on the row.
+    // Per question asked, not per answer returned, so a rejected call still
+    // records what it asked. The caller's question id finds the answer, then is
+    // dropped: it means nothing to anyone reading this log.
     const rows = asked.map(([questionId, question]) => {
         const answer = parsed?.answers?.[questionId];
         const asks = question as { type?: unknown; instructions?: unknown; criteria?: unknown };
@@ -171,24 +144,16 @@ function parseBody(body: string | undefined): Body | undefined {
     }
 }
 
-/**
- * Serialises anything object-shaped, because Axiom turns each key of a nested
- * object into a dataset column. These keys are the caller's — the fields of a
- * state, option names in `criteria`, and `instructions` may be an object too —
- * so leaving them nested lets any agent add permanent columns to the schema.
- * Strings pass through, since that is the readable case and carries no keys.
- */
+// Axiom makes a dataset column per key of a nested object, and these keys are
+// the caller's, so anything object-shaped must be serialised or the schema grows
+// without limit. Applies to state, criteria and instructions alike.
 function text(value: unknown): string | undefined {
     if (value === undefined || value === null) return undefined;
     return typeof value === "string" ? value : JSON.stringify(value);
 }
 
-/**
- * A score is probability-weighted, so it usually falls between levels and there
- * is no exact key for it: today's real answers were 2.09 and 2.10 against levels
- * 0-3. The nearest level is the closest thing to "the answer it gave"; for a
- * score, `confidence` is the number that means something.
- */
+// A score is probability-weighted and lands between levels (2.09 against levels
+// 0-3), so there is no exact key: use the nearest.
 function chosenProbability(answer: Answer | undefined): number | undefined {
     if (!answer) return undefined;
     if (answer.type === "noul") return answer.noul;

@@ -74,6 +74,10 @@ function textResult(text: string, isError = false) {
     return { content: [{ type: "text" as const, text }], isError };
 }
 
+function questionMap(value: unknown): Record<string, unknown> | undefined {
+    return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+}
+
 async function main(): Promise<void> {
     const apiKey = process.env.TYPESAFE_API_KEY;
     if (!apiKey) {
@@ -95,8 +99,11 @@ async function main(): Promise<void> {
 
         const args = (request.params.arguments ?? {}) as Record<string, unknown>;
         const startedAt = Date.now();
+        // Read before the checks, so a call rejected for a missing state still
+        // logs the questions it carried rather than a question_count of 0.
+        const asked = questionMap(args.questions);
         const reject = (message: string) => {
-            logCall({ outcome: "rejected", startedAt, state: args.state, error: message });
+            logCall({ outcome: "rejected", startedAt, state: args.state, questions: asked, error: message });
             return textResult(message, true);
         };
 
@@ -104,12 +111,10 @@ async function main(): Promise<void> {
         if (args.state === undefined || args.state === null) {
             return reject("`state` is required: give Jev the material the questions are about.");
         }
-        const questions = args.questions;
-        if (typeof questions !== "object" || questions === null || Array.isArray(questions) || Object.keys(questions).length === 0) {
+        if (!asked || Object.keys(asked).length === 0) {
             return reject("`questions` must be a non-empty object mapping your own question ids to questions.");
         }
 
-        const asked = questions as Record<string, unknown>;
         const payload = { model: args.model ?? defaultModel, state: args.state, questions: asked };
 
         try {

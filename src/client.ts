@@ -13,7 +13,9 @@ try {
 }
 
 const DEFAULT_API_URL = "https://api.typesafe.ai/v1/systemone";
-const DEFAULT_MODEL = "jev-latest";
+// Pinned deliberately; jev-latest floats. Needs all three numbers (jev-1.13 is a
+// 400) and is not in /v1/models, which lists only the aliases.
+const DEFAULT_MODEL = "jev-1.13.0";
 
 // Reimplemented from the official SDKs. Match them; do not simplify.
 const MAX_RETRIES = 2;
