@@ -21,14 +21,17 @@ export function setClient(info: { name?: string; version?: string } | undefined)
 }
 
 /**
- * The questions are logged; the state is not. The state never reaches this
- * module, and the response body arrives only to have scalars read off it, so
- * neither it nor an API error body that quotes the caller back can be shipped.
+ * The request is logged so a call can be replayed from the record; the response
+ * body is not. It arrives only to have scalars read off it, so neither it nor an
+ * API error body that quotes the caller back is ever shipped — the per-answer
+ * rows already carry what a replay compares against.
  */
 export interface CallLog {
     outcome: "ok" | "api_error" | "rejected" | "transport_error";
     startedAt: number;
-    /** What was asked, keyed by question id. Never the state. */
+    /** What the questions were asked about. */
+    state?: unknown;
+    /** What was asked, keyed by question id. */
     questions?: Record<string, unknown>;
     status?: number;
     attempts?: number;
@@ -105,6 +108,10 @@ function buildEvents(call: CallLog): Record<string, unknown>[] {
         attempts: call.attempts,
         error: call.error,
         question_count: asked.length,
+        // Serialised like everything else: a state is usually an object, and its
+        // field names are the caller's, so nested it would be the widest source
+        // of runaway columns in the dataset.
+        state: text(call.state),
         model: parsed?.model,
         input_tokens: parsed?.usage?.input_tokens,
         output_tokens: parsed?.usage?.output_tokens

@@ -111,14 +111,17 @@ Optional, and off unless you set it. Put an Axiom ingest token in `AXION_API_KEY
 shipped to the `jev-mcp` dataset. With no token nothing is sent and nothing else changes, so a clone
 does not need an Axiom account.
 
-**It logs the questions, never the state.** What you asked is recorded — the instructions and the
-criteria — because a probability you cannot attribute to a question is not worth much. What you
-asked it *about* is not: no state, no response body, no API error body. The state never reaches the
-logging code at all, and the response is read for scalars and then dropped, so an error body that
-quotes your input back cannot leak through that route either.
+**It logs the request, so a call can be replayed from the record.** The state, the instructions and
+the criteria all go in: a row saying a fault was classified, with no state, tells you a fault was
+classified but not a fault *in what*, and a replay without the state is not a replay — it is a new
+experiment wearing the old question.
 
-The split is deliberate. A question is something you wrote; a state is whatever an agent happened to
-be holding when it called.
+The response body does not. It is read for the scalars worth querying and then dropped, so neither
+it nor an API error body quoting your input back is ever shipped. The per-answer rows already carry
+the type, the value, the confidence and the probability, which is what a replay compares against.
+
+**So assume everything you send through this server reaches your Axiom dataset**, including whatever
+an agent happened to be holding in its context when it called.
 
 Each call writes one `call` event — hostname, outcome, duration, HTTP status, how many attempts it
 took, the model that answered, token counts, question count — and one `answer` event per question,
@@ -137,10 +140,11 @@ typed and collides freely between unrelated calls, while the hash covers the typ
 and the criteria, and is stable however the caller ordered those keys. There is a row per question
 *asked*, so a call the API rejected still records what was asked of it.
 
-`instructions` and `criteria` are stored as text, serialised when they are not already a string.
-Axiom turns each key of a nested object into a dataset column, and those keys would be the caller's
-option names — so left nested, any agent could add permanent columns to the schema just by naming an
-option, and the fields describing how the server behaves would end up buried under them.
+`state`, `instructions` and `criteria` are stored as text, serialised when they are not already a
+string. Axiom turns each key of a nested object into a dataset column, and those keys would be the
+caller's — option names, or every field name anyone ever puts in a state. Left nested, any agent
+could add permanent columns to the schema just by naming a field, and the columns describing how the
+server behaves would end up buried under them.
 
 Failures are logged as well as successes, since a log of only what worked hides the pattern worth
 finding. A rejected request, a non-2xx with its status, a timeout with the number of attempts it

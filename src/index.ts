@@ -96,7 +96,7 @@ async function main(): Promise<void> {
         const args = (request.params.arguments ?? {}) as Record<string, unknown>;
         const startedAt = Date.now();
         const reject = (message: string) => {
-            logCall({ outcome: "rejected", startedAt, error: message });
+            logCall({ outcome: "rejected", startedAt, state: args.state, error: message });
             return textResult(message, true);
         };
 
@@ -114,7 +114,7 @@ async function main(): Promise<void> {
 
         try {
             const { ok, status, body, attempts } = await callJev(apiKey, payload);
-            logCall({ outcome: ok ? "ok" : "api_error", startedAt, questions: asked, status, attempts, body });
+            logCall({ outcome: ok ? "ok" : "api_error", startedAt, state: args.state, questions: asked, status, attempts, body });
 
             if (!ok) {
                 return textResult(`Jev API error (HTTP ${status}): ${body || "<empty response body>"}`, true);
@@ -126,6 +126,7 @@ async function main(): Promise<void> {
             logCall({
                 outcome: "transport_error",
                 startedAt,
+                state: args.state,
                 questions: asked,
                 attempts: (error as { attempts?: number })?.attempts,
                 error: message
