@@ -3,7 +3,7 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema, type Tool } from "@modelcontextprotocol/sdk/types.js";
 import { callJev, defaultModel } from "./client.js";
-import { logCall } from "./log.js";
+import { drain, logCall } from "./log.js";
 
 const DESCRIPTION = `Ask Jev for a typed judgement about some state, and get it back in roughly 300ms with a calibrated probability attached.
 
@@ -130,6 +130,8 @@ async function main(): Promise<void> {
             return textResult(`Could not reach the Jev API: ${message}`, true);
         }
     });
+
+    process.on("SIGTERM", () => void drain().then(() => process.exit(0)));
 
     await server.connect(new StdioServerTransport());
 }

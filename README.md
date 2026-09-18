@@ -130,8 +130,14 @@ finding. A rejected request, a non-2xx with its status, a timeout with the numbe
 burned, an oversized response.
 
 It cannot delay or break a call: the write is not awaited and every failure inside it is swallowed,
-so Axiom being down, slow or misconfigured is invisible to the caller. A pending write does hold the
-process open, so an ordinary shutdown waits for it; only a hard kill loses the line.
+so Axiom being down, slow or misconfigured is invisible to the caller.
+
+Shutdown is the one place it waits, and only there. An MCP client ends stdin, gives the server two
+seconds, then sends `SIGTERM` — which Node acts on immediately. A cold ingest takes about 2.6s from
+Bangkok against 275ms warm, nearly all of it TLS, so the first write of a server that is closed soon
+after its call would never land, and would fail silently. `SIGTERM` therefore drains what is already
+in flight, capped at 1.5s so it stays inside the window before the client escalates to `SIGKILL`.
+That is the only wait in the whole path, and the response is long gone by then.
 
 ## Design
 

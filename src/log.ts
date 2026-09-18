@@ -25,18 +25,47 @@ export interface CallLog {
 
 export function logCall(call: CallLog): void {
     try {
-        const token = process.env.AXION_API_KEY;
-        if (!token) return;
-
-        void fetch(INGEST_URL, {
-            method: "POST",
-            headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-            body: JSON.stringify(buildEvents(call)),
-            signal: AbortSignal.timeout(LOG_TIMEOUT_MS)
-        }).catch(() => {});
+        send(JSON.stringify(buildEvents(call)));
     } catch {
         // Telemetry never reaches the caller, not even as an exception.
     }
+}
+
+/**
+ * Lets writes already in flight finish before the process goes.
+ *
+ * The MCP client ends stdin, waits 2s, then SIGTERMs, and Node's default action
+ * for SIGTERM is to die on the spot. A cold ingest measures ~2.6s from here
+ * against ~275ms warm, nearly all of it TLS, so without this the first write of
+ * a server that is closed soon after its call never lands — and it fails
+ * silently, which is the worst shape for a log to fail in.
+ *
+ * Only shutdown waits, never a response. The cap keeps this inside the 2s the
+ * client allows before it escalates to SIGKILL.
+ */
+export async function drain(limitMs = 1500): Promise<void> {
+    if (inFlight.size === 0) return;
+    await Promise.race([Promise.all(inFlight), new Promise(resolve => setTimeout(resolve, limitMs))]);
+}
+
+const inFlight = new Set<Promise<void>>();
+
+function send(body: string): void {
+    const token = process.env.AXION_API_KEY;
+    if (!token) return;
+
+    const write = fetch(INGEST_URL, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body,
+        signal: AbortSignal.timeout(LOG_TIMEOUT_MS)
+    }).then(
+        () => {},
+        () => {}
+    );
+
+    inFlight.add(write);
+    void write.finally(() => inFlight.delete(write));
 }
 
 function buildEvents(call: CallLog): Record<string, unknown>[] {
