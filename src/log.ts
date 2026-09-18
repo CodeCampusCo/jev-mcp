@@ -127,9 +127,9 @@ function buildEvents(call: CallLog): Record<string, unknown>[] {
             model: parsed?.model,
             question_id: questionId,
             question_hash: fingerprint(question),
-            instructions: asks.instructions,
-            criteria: asks.criteria,
-            type: answer?.type ?? asks.type,
+            instructions: text(asks.instructions),
+            criteria: text(asks.criteria),
+            type: answer?.type ?? text(asks.type),
             noul: answer?.noul,
             choice: answer?.choice,
             score: answer?.score,
@@ -164,6 +164,18 @@ function parseBody(body: string | undefined): Body | undefined {
     } catch {
         return undefined;
     }
+}
+
+/**
+ * Serialises anything object-shaped, because Axiom turns each key of a nested
+ * object into a dataset column. These keys are the caller's — option names in
+ * `criteria`, and `instructions` may be an object too — so leaving them nested
+ * lets any agent add permanent columns to the schema just by naming an option.
+ * Strings pass through, since that is the readable case and carries no keys.
+ */
+function text(value: unknown): string | undefined {
+    if (value === undefined || value === null) return undefined;
+    return typeof value === "string" ? value : JSON.stringify(value);
 }
 
 /** Stable across key order, so the same question hashes the same however it was built. */

@@ -137,6 +137,11 @@ typed and collides freely between unrelated calls, while the hash covers the typ
 and the criteria, and is stable however the caller ordered those keys. There is a row per question
 *asked*, so a call the API rejected still records what was asked of it.
 
+`instructions` and `criteria` are stored as text, serialised when they are not already a string.
+Axiom turns each key of a nested object into a dataset column, and those keys would be the caller's
+option names — so left nested, any agent could add permanent columns to the schema just by naming an
+option, and the fields describing how the server behaves would end up buried under them.
+
 Failures are logged as well as successes, since a log of only what worked hides the pattern worth
 finding. A rejected request, a non-2xx with its status, a timeout with the number of attempts it
 burned, an oversized response.
