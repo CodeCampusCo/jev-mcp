@@ -3,7 +3,7 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema, type Tool } from "@modelcontextprotocol/sdk/types.js";
 import { callJev, defaultModel } from "./client.js";
-import { drain, logCall } from "./log.js";
+import { drain, logCall, setClient } from "./log.js";
 
 const DESCRIPTION = `Ask Jev for a typed judgement about some state, and get it back in roughly 300ms with a calibrated probability attached.
 
@@ -89,6 +89,9 @@ async function main(): Promise<void> {
         if (request.params.name !== EVALUATE.name) {
             throw new Error(`Unknown tool: ${request.params.name}`);
         }
+
+        // Only known once the client has sent `initialize`, so read per call.
+        setClient(server.getClientVersion());
 
         const args = (request.params.arguments ?? {}) as Record<string, unknown>;
         const startedAt = Date.now();

@@ -121,6 +121,11 @@ took, the model that answered, token counts, question count — and one `answer`
 carrying the type, the value chosen, the confidence, and the probability Jev put on the answer it
 gave.
 
+For provenance, `hostname` answers which machine and `server_instance_id` answers which run: MCP's
+`initialize` carries no session id, so that is an id for this server process, and since a stdio
+server is spawned per client it separates concurrent sessions on one machine. The client's own
+`client_name` and `client_version` are recorded as it reports them.
+
 Those `answer` rows are the point. Probability and confidence as queryable columns, accumulated
 across real traffic, are a calibration curve for Jev on your own data — the one thing you cannot get
 from the vendor.

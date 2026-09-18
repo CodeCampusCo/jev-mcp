@@ -7,6 +7,20 @@ const LOG_TIMEOUT_MS = 10_000;
 const HOST = hostname();
 
 /**
+ * MCP's `initialize` carries no session id, only the client's name and version,
+ * so this is the honest substitute: an id for this server process. A stdio
+ * server is spawned per client, so one process is one session in practice —
+ * but it identifies the process, which is why it is not called a session id.
+ */
+const INSTANCE = randomUUID();
+
+let client: { name?: string; version?: string } = {};
+
+export function setClient(info: { name?: string; version?: string } | undefined): void {
+    client = info ?? {};
+}
+
+/**
  * No caller content is logged. The state never reaches this module — only a
  * count of questions — and the response body arrives only to have scalars read
  * off it. Nothing string-valued from a state or an error body is shipped.
@@ -40,10 +54,12 @@ export function logCall(call: CallLog): void {
  * a server that is closed soon after its call never lands — and it fails
  * silently, which is the worst shape for a log to fail in.
  *
- * Only shutdown waits, never a response. The cap keeps this inside the 2s the
- * client allows before it escalates to SIGKILL.
+ * Only shutdown waits, never a response. The cap sits just inside the 2s the
+ * client allows before it escalates to SIGKILL — a cold write can still be
+ * running 3s after SIGTERM, so a tighter cap cuts off the write it exists to
+ * protect. This makes loss rare, not impossible.
  */
-export async function drain(limitMs = 1500): Promise<void> {
+export async function drain(limitMs = 1900): Promise<void> {
     if (inFlight.size === 0) return;
     await Promise.race([Promise.all(inFlight), new Promise(resolve => setTimeout(resolve, limitMs))]);
 }
@@ -78,6 +94,9 @@ function buildEvents(call: CallLog): Record<string, unknown>[] {
         event: "call",
         call_id: id,
         hostname: HOST,
+        server_instance_id: INSTANCE,
+        client_name: client.name,
+        client_version: client.version,
         outcome: call.outcome,
         duration_ms: Date.now() - call.startedAt,
         status: call.status,
@@ -96,6 +115,7 @@ function buildEvents(call: CallLog): Record<string, unknown>[] {
         event: "answer",
         call_id: id,
         hostname: HOST,
+        server_instance_id: INSTANCE,
         model: parsed?.model,
         question_id: questionId,
         type: answer?.type,
@@ -134,10 +154,16 @@ function parseBody(body: string | undefined): Body | undefined {
     }
 }
 
+/**
+ * A score is probability-weighted, so it usually falls between levels and there
+ * is no exact key for it: today's real answers were 2.09 and 2.10 against levels
+ * 0-3. The nearest level is the closest thing to "the answer it gave". For a
+ * score the calibration number is `confidence`, not this.
+ */
 function chosenProbability(answer: Answer | undefined): number | undefined {
     if (!answer) return undefined;
     if (answer.type === "noul") return answer.noul;
     if (answer.choice !== undefined) return answer.probabilities?.[answer.choice];
-    if (answer.score !== undefined) return answer.probabilities?.[String(answer.score)];
+    if (answer.score !== undefined) return answer.probabilities?.[String(Math.round(answer.score))];
     return undefined;
 }
