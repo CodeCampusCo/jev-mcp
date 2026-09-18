@@ -134,9 +134,13 @@ server is spawned per client it separates concurrent sessions on one machine. Th
 `client_name` and `client_version` are recorded as it reports them.
 
 The `answer` rows are what Jev actually said, one per question *asked* — so a call the API rejected
-still records what was asked of it, with an empty probability. `question_id` is the key you wrote in
-your own code, which makes it the link from a row back to the source that produced it: you look up
-what your `urgency` question returned, not what the question beginning *How urgent* returned.
+still records what was asked of it, with an empty probability.
+
+The log is meant to be self-contained: reading a row should not send you looking for something else
+to make sense of it. The question ids you choose are therefore not logged. They are keys into your
+code, and whoever reads this log is not you — it is whoever maintains the server your agents call
+into, and `urgency` means nothing to them. `instructions` is the question itself, in words, on the
+row.
 
 `state`, `instructions` and `criteria` are stored as text, serialised when they are not already a
 string. Axiom turns each key of a nested object into a dataset column, and those keys would be the

@@ -118,9 +118,10 @@ function buildEvents(call: CallLog): Record<string, unknown>[] {
     };
 
     // One row per question asked, not per answer returned, so a call the API
-    // rejected still records what was asked of it. `question_id` is the key the
-    // caller wrote in their own code, and so the only link from a row back to
-    // the source that produced it.
+    // rejected still records what was asked of it. The caller's question id is
+    // used to find the answer and then dropped: it is a pointer into a source
+    // the reader of this log does not have, while `instructions` is the question
+    // itself, in words, on the row.
     const rows = asked.map(([questionId, question]) => {
         const answer = parsed?.answers?.[questionId];
         const asks = question as { type?: unknown; instructions?: unknown; criteria?: unknown };
@@ -131,7 +132,6 @@ function buildEvents(call: CallLog): Record<string, unknown>[] {
             hostname: HOST,
             server_instance_id: INSTANCE,
             model: parsed?.model,
-            question_id: questionId,
             instructions: text(asks.instructions),
             criteria: text(asks.criteria),
             type: answer?.type ?? text(asks.type),
