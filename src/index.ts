@@ -8,11 +8,11 @@ const DESCRIPTION = `Ask Jev for a typed judgement about some state, and get it 
 
 Reach for this mid-task, the way you would read a file, instead of spending a turn reasoning about a bounded question: classifying something, routing between branches, scoring against fixed levels, gating a next step, or checking whether a claim is supported by the text above it.
 
-Do not reach for it for prose, code, a number it would have to compute, or anything whose answer space you cannot enumerate before you ask. Jev writes no text at all. It only chooses — from options you supply (255 at most), from 2-10 ordered levels, or as a probability on a yes/no proposition. It also cannot say "I don't know": forced into a fixed list it will pick something confidently even when nothing fits, so include a "none of these" option whenever one is possible.
+Do not reach for it for prose, code, a number it would have to compute, or anything whose answer space you cannot enumerate before you ask. Jev writes no text at all. It only chooses — from options you supply (255 at most), from 2-10 ordered levels, or as a probability on a yes/no proposition. Choosing is also how it extracts: find the candidate spans in code with a regex or a parser, ask which one is the answer, and copy that span out yourself. A value it never retypes is a value it cannot invent. It also cannot say "I don't know": forced into a fixed list it will pick something confidently even when nothing fits, so include a "none of these" option whenever one is possible.
 
 Ask several questions in one call whenever you can. They are answered in parallel against the same state, so a question you might not need costs its own tokens and almost no extra time.
 
-Returns the API's JSON response unchanged, with a decision and probabilities under each of your question ids.`;
+Returns the API's JSON response unchanged.`;
 
 // These descriptions are the calling agent's only copy of the API contract.
 const JSON_VALUE_TYPES = ["string", "object", "array"];
@@ -37,7 +37,7 @@ const EVALUATE: Tool = {
                 type: "object",
                 minProperties: 1,
                 description:
-                    "Your questions, keyed by ids you choose. The answers come back under the same ids. Note that probabilities are not comparable across questions or across question types — never carry a threshold from one to another.",
+                    "Your questions, keyed by ids you choose. The answers come back under the same ids; the ids are not sent to the model, so name them for your own code. Note that probabilities are not comparable across questions or across question types — never carry a threshold from one to another.",
                 additionalProperties: {
                     type: "object",
                     properties: {
