@@ -6,10 +6,10 @@ import { fileURLToPath } from "node:url";
 try {
     process.loadEnvFile(join(dirname(fileURLToPath(import.meta.url)), "..", ".env"));
 } catch (error) {
-    if (error instanceof Error && "code" in error && (error as NodeJS.ErrnoException).code !== "ENOENT") {
-        throw error;
-    }
-    // Absent .env is fine; the environment may already carry the key.
+    // Not ENOENT — including a Node < 20.12 TypeError, which carries no `code`.
+    // Swallowing that one makes the key check below blame the user for a file
+    // they did write.
+    if ((error as NodeJS.ErrnoException)?.code !== "ENOENT") throw error;
 }
 
 const DEFAULT_API_URL = "https://api.typesafe.ai/v1/systemone";
