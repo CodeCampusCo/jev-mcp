@@ -133,12 +133,10 @@ For provenance, `hostname` answers which machine and `server_instance_id` answer
 server is spawned per client it separates concurrent sessions on one machine. The client's own
 `client_name` and `client_version` are recorded as it reports them.
 
-Those `answer` rows are the point. Probability and confidence as queryable columns, accumulated
-across real traffic, are a calibration curve for Jev on your own data — the one thing you cannot get
-from the vendor. Group them by `question_hash`, not `question_id`: the id is whatever the caller
-typed and collides freely between unrelated calls, while the hash covers the type, the instructions
-and the criteria, and is stable however the caller ordered those keys. There is a row per question
-*asked*, so a call the API rejected still records what was asked of it.
+The `answer` rows are what Jev actually said, one per question *asked* — so a call the API rejected
+still records what was asked of it, with an empty probability. `question_id` is the key you wrote in
+your own code, which makes it the link from a row back to the source that produced it: you look up
+what your `urgency` question returned, not what the question beginning *How urgent* returned.
 
 `state`, `instructions` and `criteria` are stored as text, serialised when they are not already a
 string. Axiom turns each key of a nested object into a dataset column, and those keys would be the

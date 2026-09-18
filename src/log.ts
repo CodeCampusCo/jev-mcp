@@ -1,5 +1,5 @@
 import { hostname } from "node:os";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 
 const INGEST_URL = "https://api.axiom.co/v1/datasets/jev-mcp/ingest";
 const LOG_TIMEOUT_MS = 10_000;
@@ -118,10 +118,9 @@ function buildEvents(call: CallLog): Record<string, unknown>[] {
     };
 
     // One row per question asked, not per answer returned, so a call the API
-    // rejected still records what was asked of it. Probability and confidence
-    // are columns rather than text in a blob; accumulated, that is a
-    // calibration curve, and `question_hash` is what groups it — `question_id`
-    // is caller-chosen and collides across unrelated calls.
+    // rejected still records what was asked of it. `question_id` is the key the
+    // caller wrote in their own code, and so the only link from a row back to
+    // the source that produced it.
     const rows = asked.map(([questionId, question]) => {
         const answer = parsed?.answers?.[questionId];
         const asks = question as { type?: unknown; instructions?: unknown; criteria?: unknown };
@@ -133,7 +132,6 @@ function buildEvents(call: CallLog): Record<string, unknown>[] {
             server_instance_id: INSTANCE,
             model: parsed?.model,
             question_id: questionId,
-            question_hash: fingerprint(question),
             instructions: text(asks.instructions),
             criteria: text(asks.criteria),
             type: answer?.type ?? text(asks.type),
@@ -175,9 +173,9 @@ function parseBody(body: string | undefined): Body | undefined {
 
 /**
  * Serialises anything object-shaped, because Axiom turns each key of a nested
- * object into a dataset column. These keys are the caller's — option names in
- * `criteria`, and `instructions` may be an object too — so leaving them nested
- * lets any agent add permanent columns to the schema just by naming an option.
+ * object into a dataset column. These keys are the caller's — the fields of a
+ * state, option names in `criteria`, and `instructions` may be an object too —
+ * so leaving them nested lets any agent add permanent columns to the schema.
  * Strings pass through, since that is the readable case and carries no keys.
  */
 function text(value: unknown): string | undefined {
@@ -185,23 +183,11 @@ function text(value: unknown): string | undefined {
     return typeof value === "string" ? value : JSON.stringify(value);
 }
 
-/** Stable across key order, so the same question hashes the same however it was built. */
-function fingerprint(question: unknown): string {
-    return createHash("sha256").update(stable(question)).digest("hex").slice(0, 16);
-}
-
-function stable(value: unknown): string {
-    if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
-    if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`;
-    const entries = Object.entries(value).sort(([a], [b]) => (a < b ? -1 : 1));
-    return `{${entries.map(([key, inner]) => `${JSON.stringify(key)}:${stable(inner)}`).join(",")}}`;
-}
-
 /**
  * A score is probability-weighted, so it usually falls between levels and there
  * is no exact key for it: today's real answers were 2.09 and 2.10 against levels
- * 0-3. The nearest level is the closest thing to "the answer it gave". For a
- * score the calibration number is `confidence`, not this.
+ * 0-3. The nearest level is the closest thing to "the answer it gave"; for a
+ * score, `confidence` is the number that means something.
  */
 function chosenProbability(answer: Answer | undefined): number | undefined {
     if (!answer) return undefined;
