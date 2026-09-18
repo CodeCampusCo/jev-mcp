@@ -1,0 +1,112 @@
+# jev-mcp
+
+An MCP server that gives a coding agent one tool: **ask Jev a typed question and get a short answer
+back.**
+
+[Jev](https://typesafe.ai) is a model that generates no text. You hand it some state plus typed
+questions; it returns a decision for each one with a calibrated probability. Answers come back in
+roughly 300ms.
+
+This server exists so an agent can reach for that mid-task — the same way it reaches for a file read
+— instead of spending a turn reasoning about a question whose answer space is three words wide.
+
+## What it is for
+
+Small judgments that are bounded and that you would otherwise think about:
+
+- *Are these two things really two things, or one?*
+- *Which of these four categories does this belong to?*
+- *Is this claim supported by the text above it?*
+
+And what it is **not** for: anything that needs prose, code, a number it has to compute, or an answer
+you cannot enumerate in advance. Jev writes nothing. It only chooses.
+
+## Install
+
+```sh
+npm install
+npm run build
+```
+
+Then register it with your agent. For Claude Code:
+
+```sh
+claude mcp add jev -- node /absolute/path/to/jev-mcp/dist/index.js
+```
+
+Set your key in the environment:
+
+```sh
+export TYPESAFE_API_KEY=...
+```
+
+## The tool
+
+One tool, `evaluate`. It takes the state to judge and a map of questions, and returns the API's
+response unchanged.
+
+```jsonc
+{
+  "state": "The cat sat on the mat. It is a large orange tabby.",
+  "questions": {
+    "colour": {
+      "type": "choice",
+      "instructions": "What colour is the animal?",
+      "criteria": { "orange": "The animal is orange.", "black": "The animal is black." }
+    },
+    "large": {
+      "type": "noul",
+      "instructions": "Is the animal large for its species?"
+    }
+  }
+}
+```
+
+### Question types
+
+| type | ask it | returns |
+|---|---|---|
+| `noul` | a yes/no proposition | a probability between 0 and 1 |
+| `choice` | pick one of up to 255 options | the option, a probability for each, and a confidence |
+| `score` | rate against 2–10 ordered levels | the level, probabilities, and a confidence |
+
+`criteria` is optional for `noul` (`{"true": …, "false": …}`), required for `choice` (a map of option
+name to description), and required for `score` (an ordered array of at least two level
+descriptions).
+
+Ask several questions in one call whenever you can. They are answered in parallel against the same
+state, so a question you might not need costs its own tokens and almost no extra time.
+
+## Things worth knowing before you use it
+
+**It cannot say "I don't know."** Forced into a yes/no or a fixed list, it will pick something even
+when nothing fits, and it will pick confidently. Include a "none of these" option whenever one is
+possible.
+
+**It does not count and it does not do arithmetic.** It reads dates as text, not as quantities that
+come before or after each other. Keep all of that in your own code.
+
+**Accuracy falls as the state fills with material the question does not need.** Filter first; send
+the fields the question actually reads.
+
+**Probabilities are not comparable across questions.** The same question asked as a `noul` and as a
+yes/no `choice` can disagree, and a question and its negation need not sum to one. Never carry a
+threshold from one question type to another.
+
+**Limits.** 255 options per choice, 10 levels per score, roughly 32k tokens of state and 64k for the
+whole request.
+
+## Design
+
+The server is a passthrough. It does not interpret the response, reshape it, or summarise it — the
+raw JSON goes back to the caller, so probabilities arrive intact and any field the API adds later
+passes through without a change here.
+
+It talks to the API over plain `fetch` rather than a vendor SDK. The request surface is a single
+endpoint with three question types, and a passthrough gets no benefit from typed responses it never
+reads. Retry behaviour is reimplemented deliberately, matching the official SDKs including the
+`retry-after-ms` header that is not in the published API reference.
+
+## Licence
+
+MIT.
