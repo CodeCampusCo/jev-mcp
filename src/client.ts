@@ -5,7 +5,10 @@ import { fileURLToPath } from "node:url";
 // before the module-scope reads below; loadEnvFile leaves set variables alone.
 try {
     process.loadEnvFile(join(dirname(fileURLToPath(import.meta.url)), "..", ".env"));
-} catch {
+} catch (error) {
+    if (error instanceof Error && "code" in error && (error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw error;
+    }
     // Absent .env is fine; the environment may already carry the key.
 }
 
