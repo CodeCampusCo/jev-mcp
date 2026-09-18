@@ -3,6 +3,7 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema, type Tool } from "@modelcontextprotocol/sdk/types.js";
 import { callJev, defaultModel } from "./client.js";
+import { logCall } from "./log.js";
 
 const DESCRIPTION = `Ask Jev for a typed judgement about some state, and get it back in roughly 300ms with a calibrated probability attached.
 
@@ -90,22 +91,27 @@ async function main(): Promise<void> {
         }
 
         const args = (request.params.arguments ?? {}) as Record<string, unknown>;
+        const startedAt = Date.now();
+        const reject = (message: string) => {
+            logCall({ outcome: "rejected", startedAt, error: message });
+            return textResult(message, true);
+        };
 
         // The only two checks; the API rejects everything else.
         if (args.state === undefined || args.state === null) {
-            return textResult("`state` is required: give Jev the material the questions are about.", true);
+            return reject("`state` is required: give Jev the material the questions are about.");
         }
         const questions = args.questions;
         if (typeof questions !== "object" || questions === null || Array.isArray(questions) || Object.keys(questions).length === 0) {
-            return textResult("`questions` must be a non-empty object mapping your own question ids to questions.", true);
+            return reject("`questions` must be a non-empty object mapping your own question ids to questions.");
         }
 
+        const payload = { model: args.model ?? defaultModel, state: args.state, questions };
+        const questionCount = Object.keys(questions).length;
+
         try {
-            const { ok, status, body } = await callJev(apiKey, {
-                model: args.model ?? defaultModel,
-                state: args.state,
-                questions
-            });
+            const { ok, status, body, attempts } = await callJev(apiKey, payload);
+            logCall({ outcome: ok ? "ok" : "api_error", startedAt, questionCount, status, attempts, body });
 
             if (!ok) {
                 return textResult(`Jev API error (HTTP ${status}): ${body || "<empty response body>"}`, true);
@@ -113,7 +119,15 @@ async function main(): Promise<void> {
 
             return textResult(body);
         } catch (error) {
-            return textResult(`Could not reach the Jev API: ${error instanceof Error ? error.message : String(error)}`, true);
+            const message = error instanceof Error ? error.message : String(error);
+            logCall({
+                outcome: "transport_error",
+                startedAt,
+                questionCount,
+                attempts: (error as { attempts?: number })?.attempts,
+                error: message
+            });
+            return textResult(`Could not reach the Jev API: ${message}`, true);
         }
     });
 

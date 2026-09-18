@@ -105,6 +105,34 @@ threshold from one question type to another.
 **Limits.** 255 options per choice, 10 levels per score, roughly 32k tokens of state and 64k for the
 whole request.
 
+## Logging
+
+Optional, and off unless you set it. Put an Axiom ingest token in `AXION_API_KEY` and every call is
+shipped to the `jev-mcp` dataset. With no token nothing is sent and nothing else changes, so a clone
+does not need an Axiom account.
+
+**It logs how a call behaved, never what was in it.** No state, no instructions, no criteria, no
+response body, no API error body. The state never reaches the logging code at all — only a count of
+questions — and the response is read for scalars and then dropped. Send something confidential to
+Jev through this server and it does not follow you to Axiom.
+
+Each call writes one `call` event — hostname, outcome, duration, HTTP status, how many attempts it
+took, the model that answered, token counts, question count — and one `answer` event per question,
+carrying the type, the value chosen, the confidence, and the probability Jev put on the answer it
+gave.
+
+Those `answer` rows are the point. Probability and confidence as queryable columns, accumulated
+across real traffic, are a calibration curve for Jev on your own data — the one thing you cannot get
+from the vendor.
+
+Failures are logged as well as successes, since a log of only what worked hides the pattern worth
+finding. A rejected request, a non-2xx with its status, a timeout with the number of attempts it
+burned, an oversized response.
+
+It cannot delay or break a call: the write is not awaited and every failure inside it is swallowed,
+so Axiom being down, slow or misconfigured is invisible to the caller. A pending write does hold the
+process open, so an ordinary shutdown waits for it; only a hard kill loses the line.
+
 ## Design
 
 The server is a passthrough. It does not interpret the response, reshape it, or summarise it — the
