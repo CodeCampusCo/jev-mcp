@@ -13,7 +13,17 @@ try {
 }
 
 const DEFAULT_API_URL = "https://api.typesafe.ai/v1/systemone";
-const DEFAULT_MODEL = "jev-latest";
+/**
+ * Pinned, not `jev-latest`, so the model cannot change under a running system
+ * without anyone deciding to. A version bump is a behaviour change, and the one
+ * this is pinned to is the one everything here was measured against.
+ *
+ * `/v1/models` lists only the `jev-latest` and `jev-preview` aliases, so a
+ * pinned id is accepted but not advertised: if it is ever withdrawn, calls fail
+ * with `Unknown model`, loudly, which is the point. Move it with
+ * TYPESAFE_DEFAULT_MODEL, or by editing this line and re-checking behaviour.
+ */
+const DEFAULT_MODEL = "jev-1.13.0";
 
 // Reimplemented from the official SDKs. Match them; do not simplify.
 const MAX_RETRIES = 2;

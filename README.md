@@ -49,6 +49,13 @@ Two overrides exist and are rarely needed, in the environment or in the same fil
 `TYPESAFE_API_URL` points the server at a different endpoint, and `TYPESAFE_DEFAULT_MODEL`
 changes the model used when a call does not name one.
 
+**The model is pinned to a version, not to `jev-latest`.** A version bump is a behaviour change —
+probabilities move, and a threshold fitted against one version is not fitted against the next — so
+it should happen when someone decides it should, not quietly underneath a running system. The API
+lists only the `jev-latest` and `jev-preview` aliases, so a pinned id is accepted without being
+advertised: should it ever be withdrawn, calls fail with `Unknown model` rather than silently
+answering differently. That is the trade, and it is the right way round.
+
 ## The tool
 
 One tool, `evaluate`. It takes the state to judge and a map of questions, and returns the API's
