@@ -1,3 +1,16 @@
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// Resolved against the package root — one level up from the dist/ this compiles
+// to — because an agent spawns the server from an arbitrary cwd. An exported
+// variable wins: loadEnvFile does not overwrite process.env, as --env-file does
+// not. Loading here rather than in main() so it lands before the reads below.
+try {
+    process.loadEnvFile(join(dirname(fileURLToPath(import.meta.url)), "..", ".env"));
+} catch {
+    // No .env, or unreadable. The environment may already carry the key.
+}
+
 const DEFAULT_API_URL = "https://api.typesafe.ai/v1/systemone";
 const DEFAULT_MODEL = "jev-latest";
 
