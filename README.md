@@ -107,7 +107,7 @@ whole request.
 
 ## Logging
 
-Optional, and off unless you set it. Put an Axiom ingest token in `AXION_API_KEY` and every call is
+Optional, and off unless you set it. Put an Axiom ingest token in `AXIOM_API_KEY` and every call is
 shipped to the `jev-mcp` dataset. With no token nothing is sent and nothing else changes, so a clone
 does not need an Axiom account.
 

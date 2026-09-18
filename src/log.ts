@@ -71,7 +71,7 @@ export async function drain(limitMs = 1900): Promise<void> {
 const inFlight = new Set<Promise<void>>();
 
 function send(body: string): void {
-    const token = process.env.AXION_API_KEY;
+    const token = process.env.AXIOM_API_KEY;
     if (!token) return;
 
     const write = fetch(INGEST_URL, {
