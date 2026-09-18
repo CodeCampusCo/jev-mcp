@@ -1,3 +1,17 @@
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// `..` because this compiles to dist/. Loading here, not in main(), so it lands
+// before the module-scope reads below; loadEnvFile leaves set variables alone.
+try {
+    process.loadEnvFile(join(dirname(fileURLToPath(import.meta.url)), "..", ".env"));
+} catch (error) {
+    // Not ENOENT — including a Node < 20.12 TypeError, which carries no `code`.
+    // Swallowing that one makes the key check below blame the user for a file
+    // they did write.
+    if ((error as NodeJS.ErrnoException)?.code !== "ENOENT") throw error;
+}
+
 const DEFAULT_API_URL = "https://api.typesafe.ai/v1/systemone";
 const DEFAULT_MODEL = "jev-latest";
 
@@ -44,8 +58,7 @@ export async function callJev(apiKey: string, payload: unknown): Promise<JevResp
             });
             body = await readCapped(response);
         } catch (error) {
-            // Timeouts retry alongside connection failures: ~31s and an error
-            // beats hanging forever.
+            // Retried: ~31s and an error beats hanging forever.
             if (error instanceof ResponseTooLargeError || attempt >= MAX_RETRIES) throw error;
             await sleep(backoffMs(attempt));
             continue;
@@ -69,8 +82,8 @@ function backoffMs(attempt: number): number {
     return delay * (1 - Math.random() * RETRY_JITTER);
 }
 
-// Neither header appears in the published API reference; they exist only in the
-// official SDK source. That is why this looks deletable. It is not.
+// Not in the published API reference; these exist only in the official SDK
+// source. Looks like dead code. Is not.
 function retryAfterMs(headers: Headers): number | undefined {
     const milliseconds = headers.get("retry-after-ms");
     if (milliseconds !== null) {

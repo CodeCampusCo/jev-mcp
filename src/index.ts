@@ -76,7 +76,7 @@ function textResult(text: string, isError = false) {
 async function main(): Promise<void> {
     const apiKey = process.env.TYPESAFE_API_KEY;
     if (!apiKey) {
-        console.error("TYPESAFE_API_KEY is not set. Get a key at https://typesafe.ai and put it in the environment jev-mcp runs in.");
+        console.error("TYPESAFE_API_KEY is not set. Put it in a .env file in the jev-mcp directory (see .env.example), or export it in the environment jev-mcp runs in.");
         process.exit(1);
     }
 

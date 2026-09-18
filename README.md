@@ -34,14 +34,20 @@ Then register it with your agent. For Claude Code:
 claude mcp add jev -- node /absolute/path/to/jev-mcp/dist/index.js
 ```
 
-Set your key in the environment:
+Put your key in a `.env` next to this README:
 
 ```sh
-export TYPESAFE_API_KEY=...
+cp .env.example .env
 ```
 
-Two overrides exist and are rarely needed: `TYPESAFE_API_URL` points the server at a different
-endpoint, and `TYPESAFE_DEFAULT_MODEL` changes the model used when a call does not name one.
+The server reads that file at startup, resolved against its own directory rather than wherever
+your agent happened to launch it from. The key stays with the server instead of being written
+into your agent's configuration. An exported `TYPESAFE_API_KEY` still works and wins over the
+file, so a one-off run can override it.
+
+Two overrides exist and are rarely needed, in the environment or in the same file:
+`TYPESAFE_API_URL` points the server at a different endpoint, and `TYPESAFE_DEFAULT_MODEL`
+changes the model used when a call does not name one.
 
 ## The tool
 
