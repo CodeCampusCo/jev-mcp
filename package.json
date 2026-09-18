@@ -1,0 +1,27 @@
+{
+  "name": "jev-mcp",
+  "version": "0.1.0",
+  "description": "MCP server exposing one tool: ask Jev a typed question and get a short answer back.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "jev-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
+  }
+}

@@ -26,6 +26,7 @@ produces no prose, code, or free-form text. Treat changes to it as behaviour cha
 
 ## Contributing
 
-`main` is protected: every change lands through a PR, including your own. Self-merge is fine.
+`main` is protected: every change lands through a PR, including your own. Parintorn merges — no
+agent merges its own work, ever.
 
 Keep plans, scratch notes and premortems out of the repository — gitignore them.
