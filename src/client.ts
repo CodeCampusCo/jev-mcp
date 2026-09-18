@@ -1,33 +1,18 @@
-/**
- * The HTTP side: one POST to the Jev endpoint, with the retry behaviour of the
- * official TypeSafe SDKs reimplemented rather than simplified.
- */
-
 const DEFAULT_API_URL = "https://api.typesafe.ai/v1/systemone";
 const DEFAULT_MODEL = "jev-latest";
 
-// Matches the official SDKs: 2 retries, 500ms doubling to a 5s ceiling, and up
-// to 25% of each delay shaved off as jitter.
+// Reimplemented from the official SDKs. Match them; do not simplify.
 const MAX_RETRIES = 2;
 const INITIAL_RETRY_DELAY_MS = 500;
 const MAX_RETRY_DELAY_MS = 5_000;
 const RETRY_JITTER = 0.25;
 const MAX_RETRY_AFTER_MS = 60_000;
 
-/**
- * A 10s deadline, matching the official SDKs. It is per attempt rather than
- * across the retry sequence, so an attempt that stalls still gets its retries.
- *
- * Node's fetch has no deadline of its own: without this, an endpoint that
- * accepts the connection and then goes quiet hangs the caller forever. That is
- * the one failure an agent cannot handle, because nothing ever tells it to give
- * up. An answer normally arrives in ~300ms, so 10s has already failed.
- */
+// Node's fetch has no deadline of its own. 10s matches the official SDKs.
 const REQUEST_TIMEOUT_MS = 10_000;
 
 const RETRYABLE_STATUSES = new Set([408, 429, 529]);
 
-/** Guard against an oversized body exhausting memory. A typed answer is tiny. */
 const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
 
 class ResponseTooLargeError extends Error {}
@@ -38,7 +23,7 @@ export const defaultModel = process.env.TYPESAFE_DEFAULT_MODEL || DEFAULT_MODEL;
 export interface JevResponse {
     ok: boolean;
     status: number;
-    /** The raw response body, passed back to the caller unchanged. */
+    /** Raw. Never parsed, never re-serialised. */
     body: string;
 }
 
@@ -54,18 +39,13 @@ export async function callJev(apiKey: string, payload: unknown): Promise<JevResp
                     authorization: `Bearer ${apiKey}`
                 },
                 body: JSON.stringify(payload),
-                // The signal covers reading the body too, not just the headers,
-                // so a response that stalls halfway also hits the deadline.
+                // Aborts the body read too, not just the headers.
                 signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
             });
             body = await readCapped(response);
         } catch (error) {
-            // A connection failure or a timeout never produced an answer, so
-            // both are retried like a 5xx — the official SDKs do the same. A
-            // retried timeout means a hung endpoint costs ~30s before the caller
-            // hears anything, which is the right trade: a stall is usually
-            // transient, and 30s and an error beats hanging forever. An
-            // oversized body is not retried; it would be oversized again.
+            // Timeouts retry alongside connection failures: ~31s and an error
+            // beats hanging forever.
             if (error instanceof ResponseTooLargeError || attempt >= MAX_RETRIES) throw error;
             await sleep(backoffMs(attempt));
             continue;
@@ -89,13 +69,8 @@ function backoffMs(attempt: number): number {
     return delay * (1 - Math.random() * RETRY_JITTER);
 }
 
-/**
- * `retry-after-ms` wins over `Retry-After`, and either is capped at 60s.
- *
- * Neither header appears in the published API reference — they exist only in the
- * official SDK source, which is why this looks like it could be deleted. It
- * cannot: dropping it makes us ignore the server's own backpressure signal.
- */
+// Neither header appears in the published API reference; they exist only in the
+// official SDK source. That is why this looks deletable. It is not.
 function retryAfterMs(headers: Headers): number | undefined {
     const milliseconds = headers.get("retry-after-ms");
     if (milliseconds !== null) {
@@ -106,7 +81,6 @@ function retryAfterMs(headers: Headers): number | undefined {
     const retryAfter = headers.get("retry-after");
     if (retryAfter !== null) {
         const seconds = Number.parseFloat(retryAfter);
-        // `Retry-After` is either a count of seconds or an HTTP date.
         const parsed = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(retryAfter) - Date.now();
         if (Number.isFinite(parsed) && parsed >= 0) return Math.min(parsed, MAX_RETRY_AFTER_MS);
     }

@@ -1,9 +1,4 @@
 #!/usr/bin/env node
-/**
- * An MCP server with one tool, `evaluate`, that forwards a typed question to the
- * Jev API and hands the response back unchanged.
- */
-
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema, type Tool } from "@modelcontextprotocol/sdk/types.js";
@@ -19,10 +14,7 @@ Ask several questions in one call whenever you can. They are answered in paralle
 
 Returns the API's JSON response unchanged, with a decision and probabilities under each of your question ids.`;
 
-// Documented here rather than validated: the API is the authority on what a
-// well-formed request is, and its 4xx body tells the caller more than a guess
-// from this side would. These descriptions are the calling agent's only copy of
-// the contract, so keep them accurate.
+// These descriptions are the calling agent's only copy of the API contract.
 const JSON_VALUE_TYPES = ["string", "object", "array"];
 
 const EVALUATE: Tool = {
@@ -99,7 +91,7 @@ async function main(): Promise<void> {
 
         const args = (request.params.arguments ?? {}) as Record<string, unknown>;
 
-        // The only two checks. Everything else is the API's to reject.
+        // The only two checks; the API rejects everything else.
         if (args.state === undefined || args.state === null) {
             return textResult("`state` is required: give Jev the material the questions are about.", true);
         }
