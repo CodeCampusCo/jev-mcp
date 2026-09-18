@@ -111,10 +111,14 @@ Optional, and off unless you set it. Put an Axiom ingest token in `AXION_API_KEY
 shipped to the `jev-mcp` dataset. With no token nothing is sent and nothing else changes, so a clone
 does not need an Axiom account.
 
-**It logs how a call behaved, never what was in it.** No state, no instructions, no criteria, no
-response body, no API error body. The state never reaches the logging code at all — only a count of
-questions — and the response is read for scalars and then dropped. Send something confidential to
-Jev through this server and it does not follow you to Axiom.
+**It logs the questions, never the state.** What you asked is recorded — the instructions and the
+criteria — because a probability you cannot attribute to a question is not worth much. What you
+asked it *about* is not: no state, no response body, no API error body. The state never reaches the
+logging code at all, and the response is read for scalars and then dropped, so an error body that
+quotes your input back cannot leak through that route either.
+
+The split is deliberate. A question is something you wrote; a state is whatever an agent happened to
+be holding when it called.
 
 Each call writes one `call` event — hostname, outcome, duration, HTTP status, how many attempts it
 took, the model that answered, token counts, question count — and one `answer` event per question,
@@ -128,7 +132,10 @@ server is spawned per client it separates concurrent sessions on one machine. Th
 
 Those `answer` rows are the point. Probability and confidence as queryable columns, accumulated
 across real traffic, are a calibration curve for Jev on your own data — the one thing you cannot get
-from the vendor.
+from the vendor. Group them by `question_hash`, not `question_id`: the id is whatever the caller
+typed and collides freely between unrelated calls, while the hash covers the type, the instructions
+and the criteria, and is stable however the caller ordered those keys. There is a row per question
+*asked*, so a call the API rejected still records what was asked of it.
 
 Failures are logged as well as successes, since a log of only what worked hides the pattern worth
 finding. A rejected request, a non-2xx with its status, a timeout with the number of attempts it

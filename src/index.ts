@@ -109,12 +109,12 @@ async function main(): Promise<void> {
             return reject("`questions` must be a non-empty object mapping your own question ids to questions.");
         }
 
-        const payload = { model: args.model ?? defaultModel, state: args.state, questions };
-        const questionCount = Object.keys(questions).length;
+        const asked = questions as Record<string, unknown>;
+        const payload = { model: args.model ?? defaultModel, state: args.state, questions: asked };
 
         try {
             const { ok, status, body, attempts } = await callJev(apiKey, payload);
-            logCall({ outcome: ok ? "ok" : "api_error", startedAt, questionCount, status, attempts, body });
+            logCall({ outcome: ok ? "ok" : "api_error", startedAt, questions: asked, status, attempts, body });
 
             if (!ok) {
                 return textResult(`Jev API error (HTTP ${status}): ${body || "<empty response body>"}`, true);
@@ -126,7 +126,7 @@ async function main(): Promise<void> {
             logCall({
                 outcome: "transport_error",
                 startedAt,
-                questionCount,
+                questions: asked,
                 attempts: (error as { attempts?: number })?.attempts,
                 error: message
             });

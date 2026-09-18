@@ -1,5 +1,5 @@
 import { hostname } from "node:os";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 const INGEST_URL = "https://api.axiom.co/v1/datasets/jev-mcp/ingest";
 const LOG_TIMEOUT_MS = 10_000;
@@ -21,14 +21,15 @@ export function setClient(info: { name?: string; version?: string } | undefined)
 }
 
 /**
- * No caller content is logged. The state never reaches this module — only a
- * count of questions — and the response body arrives only to have scalars read
- * off it. Nothing string-valued from a state or an error body is shipped.
+ * The questions are logged; the state is not. The state never reaches this
+ * module, and the response body arrives only to have scalars read off it, so
+ * neither it nor an API error body that quotes the caller back can be shipped.
  */
 export interface CallLog {
     outcome: "ok" | "api_error" | "rejected" | "transport_error";
     startedAt: number;
-    questionCount?: number;
+    /** What was asked, keyed by question id. Never the state. */
+    questions?: Record<string, unknown>;
     status?: number;
     attempts?: number;
     /** Read for model, usage and answer values. Never shipped. */
@@ -88,6 +89,7 @@ function buildEvents(call: CallLog): Record<string, unknown>[] {
     const time = new Date().toISOString();
     const id = randomUUID();
     const parsed = parseBody(call.body);
+    const asked = Object.entries(call.questions ?? {});
 
     const event: Record<string, unknown> = {
         _time: time,
@@ -102,29 +104,39 @@ function buildEvents(call: CallLog): Record<string, unknown>[] {
         status: call.status,
         attempts: call.attempts,
         error: call.error,
-        question_count: call.questionCount,
+        question_count: asked.length,
         model: parsed?.model,
         input_tokens: parsed?.usage?.input_tokens,
         output_tokens: parsed?.usage?.output_tokens
     };
 
-    // One row per answer: probability and confidence as queryable columns, not
-    // text inside a blob. Accumulated, that is a calibration curve.
-    const rows = Object.entries(parsed?.answers ?? {}).map(([questionId, answer]) => ({
-        _time: time,
-        event: "answer",
-        call_id: id,
-        hostname: HOST,
-        server_instance_id: INSTANCE,
-        model: parsed?.model,
-        question_id: questionId,
-        type: answer?.type,
-        noul: answer?.noul,
-        choice: answer?.choice,
-        score: answer?.score,
-        confidence: answer?.confidence,
-        probability: chosenProbability(answer)
-    }));
+    // One row per question asked, not per answer returned, so a call the API
+    // rejected still records what was asked of it. Probability and confidence
+    // are columns rather than text in a blob; accumulated, that is a
+    // calibration curve, and `question_hash` is what groups it — `question_id`
+    // is caller-chosen and collides across unrelated calls.
+    const rows = asked.map(([questionId, question]) => {
+        const answer = parsed?.answers?.[questionId];
+        const asks = question as { type?: unknown; instructions?: unknown; criteria?: unknown };
+        return {
+            _time: time,
+            event: "answer",
+            call_id: id,
+            hostname: HOST,
+            server_instance_id: INSTANCE,
+            model: parsed?.model,
+            question_id: questionId,
+            question_hash: fingerprint(question),
+            instructions: asks.instructions,
+            criteria: asks.criteria,
+            type: answer?.type ?? asks.type,
+            noul: answer?.noul,
+            choice: answer?.choice,
+            score: answer?.score,
+            confidence: answer?.confidence,
+            probability: chosenProbability(answer)
+        };
+    });
 
     return [event, ...rows];
 }
@@ -152,6 +164,18 @@ function parseBody(body: string | undefined): Body | undefined {
     } catch {
         return undefined;
     }
+}
+
+/** Stable across key order, so the same question hashes the same however it was built. */
+function fingerprint(question: unknown): string {
+    return createHash("sha256").update(stable(question)).digest("hex").slice(0, 16);
+}
+
+function stable(value: unknown): string {
+    if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
+    if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`;
+    const entries = Object.entries(value).sort(([a], [b]) => (a < b ? -1 : 1));
+    return `{${entries.map(([key, inner]) => `${JSON.stringify(key)}:${stable(inner)}`).join(",")}}`;
 }
 
 /**
