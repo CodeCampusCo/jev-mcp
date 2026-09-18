@@ -14,10 +14,23 @@ const MAX_RETRY_DELAY_MS = 5_000;
 const RETRY_JITTER = 0.25;
 const MAX_RETRY_AFTER_MS = 60_000;
 
+/**
+ * A 10s deadline, matching the official SDKs. It is per attempt rather than
+ * across the retry sequence, so an attempt that stalls still gets its retries.
+ *
+ * Node's fetch has no deadline of its own: without this, an endpoint that
+ * accepts the connection and then goes quiet hangs the caller forever. That is
+ * the one failure an agent cannot handle, because nothing ever tells it to give
+ * up. An answer normally arrives in ~300ms, so 10s has already failed.
+ */
+const REQUEST_TIMEOUT_MS = 10_000;
+
 const RETRYABLE_STATUSES = new Set([408, 429, 529]);
 
 /** Guard against an oversized body exhausting memory. A typed answer is tiny. */
 const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
+
+class ResponseTooLargeError extends Error {}
 
 export const apiUrl = process.env.TYPESAFE_API_URL || DEFAULT_API_URL;
 export const defaultModel = process.env.TYPESAFE_DEFAULT_MODEL || DEFAULT_MODEL;
@@ -32,6 +45,7 @@ export interface JevResponse {
 export async function callJev(apiKey: string, payload: unknown): Promise<JevResponse> {
     for (let attempt = 0; ; attempt++) {
         let response: Response;
+        let body: string;
         try {
             response = await fetch(apiUrl, {
                 method: "POST",
@@ -39,19 +53,23 @@ export async function callJev(apiKey: string, payload: unknown): Promise<JevResp
                     "content-type": "application/json",
                     authorization: `Bearer ${apiKey}`
                 },
-                body: JSON.stringify(payload)
+                body: JSON.stringify(payload),
+                // The signal covers reading the body too, not just the headers,
+                // so a response that stalls halfway also hits the deadline.
+                signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
             });
+            body = await readCapped(response);
         } catch (error) {
-            // A connection-level failure never reached the API, so it is retried
-            // like a 5xx — the official SDKs do the same.
-            if (attempt < MAX_RETRIES) {
-                await sleep(backoffMs(attempt));
-                continue;
-            }
-            throw error;
+            // A connection failure or a timeout never produced an answer, so
+            // both are retried like a 5xx — the official SDKs do the same. A
+            // retried timeout means a hung endpoint costs ~30s before the caller
+            // hears anything, which is the right trade: a stall is usually
+            // transient, and 30s and an error beats hanging forever. An
+            // oversized body is not retried; it would be oversized again.
+            if (error instanceof ResponseTooLargeError || attempt >= MAX_RETRIES) throw error;
+            await sleep(backoffMs(attempt));
+            continue;
         }
-
-        const body = await readCapped(response);
 
         if (!response.ok && isRetryable(response.status) && attempt < MAX_RETRIES) {
             await sleep(retryAfterMs(response.headers) ?? backoffMs(attempt));
@@ -110,7 +128,7 @@ async function readCapped(response: Response): Promise<string> {
         total += value.byteLength;
         if (total > MAX_RESPONSE_BYTES) {
             await reader.cancel();
-            throw new Error(`Jev response exceeded ${MAX_RESPONSE_BYTES} bytes and was abandoned.`);
+            throw new ResponseTooLargeError(`Jev response exceeded ${MAX_RESPONSE_BYTES} bytes and was abandoned.`);
         }
         chunks.push(value);
     }
