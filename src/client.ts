@@ -39,6 +39,7 @@ export interface JevResponse {
     status: number;
     /** Raw. Never parsed, never re-serialised. */
     body: string;
+    attempts: number;
 }
 
 export async function callJev(apiKey: string, payload: unknown): Promise<JevResponse> {
@@ -59,7 +60,9 @@ export async function callJev(apiKey: string, payload: unknown): Promise<JevResp
             body = await readCapped(response);
         } catch (error) {
             // Retried: ~31s and an error beats hanging forever.
-            if (error instanceof ResponseTooLargeError || attempt >= MAX_RETRIES) throw error;
+            if (error instanceof ResponseTooLargeError || attempt >= MAX_RETRIES) {
+                throw Object.assign(error as Error, { attempts: attempt + 1 });
+            }
             await sleep(backoffMs(attempt));
             continue;
         }
@@ -69,7 +72,7 @@ export async function callJev(apiKey: string, payload: unknown): Promise<JevResp
             continue;
         }
 
-        return { ok: response.ok, status: response.status, body };
+        return { ok: response.ok, status: response.status, body, attempts: attempt + 1 };
     }
 }
 

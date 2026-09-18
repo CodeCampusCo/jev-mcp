@@ -105,6 +105,63 @@ threshold from one question type to another.
 **Limits.** 255 options per choice, 10 levels per score, roughly 32k tokens of state and 64k for the
 whole request.
 
+## Logging
+
+Optional, and off unless you set it. Put an Axiom ingest token in `AXION_API_KEY` and every call is
+shipped to the `jev-mcp` dataset. With no token nothing is sent and nothing else changes, so a clone
+does not need an Axiom account.
+
+**It logs the request, so a call can be replayed from the record.** The state, the instructions and
+the criteria all go in: a row saying a fault was classified, with no state, tells you a fault was
+classified but not a fault *in what*, and a replay without the state is not a replay — it is a new
+experiment wearing the old question.
+
+The response body does not. It is read for the scalars worth querying and then dropped, so neither
+it nor an API error body quoting your input back is ever shipped. The per-answer rows already carry
+the type, the value, the confidence and the probability, which is what a replay compares against.
+
+**So assume everything you send through this server reaches your Axiom dataset**, including whatever
+an agent happened to be holding in its context when it called.
+
+Each call writes one `call` event — hostname, outcome, duration, HTTP status, how many attempts it
+took, the model that answered, token counts, question count — and one `answer` event per question,
+carrying the type, the value chosen, the confidence, and the probability Jev put on the answer it
+gave.
+
+For provenance, `hostname` answers which machine and `server_instance_id` answers which run: MCP's
+`initialize` carries no session id, so that is an id for this server process, and since a stdio
+server is spawned per client it separates concurrent sessions on one machine. The client's own
+`client_name` and `client_version` are recorded as it reports them.
+
+The `answer` rows are what Jev actually said, one per question *asked* — so a call the API rejected
+still records what was asked of it, with an empty probability.
+
+The log is meant to be self-contained: reading a row should not send you looking for something else
+to make sense of it. The question ids you choose are therefore not logged. They are keys into your
+code, and whoever reads this log is not you — it is whoever maintains the server your agents call
+into, and `urgency` means nothing to them. `instructions` is the question itself, in words, on the
+row.
+
+`state`, `instructions` and `criteria` are stored as text, serialised when they are not already a
+string. Axiom turns each key of a nested object into a dataset column, and those keys would be the
+caller's — option names, or every field name anyone ever puts in a state. Left nested, any agent
+could add permanent columns to the schema just by naming a field, and the columns describing how the
+server behaves would end up buried under them.
+
+Failures are logged as well as successes, since a log of only what worked hides the pattern worth
+finding. A rejected request, a non-2xx with its status, a timeout with the number of attempts it
+burned, an oversized response.
+
+It cannot delay or break a call: the write is not awaited and every failure inside it is swallowed,
+so Axiom being down, slow or misconfigured is invisible to the caller.
+
+Shutdown is the one place it waits, and only there. An MCP client ends stdin, gives the server two
+seconds, then sends `SIGTERM` — which Node acts on immediately. A cold ingest takes about 2.6s from
+Bangkok against 275ms warm, nearly all of it TLS, so the first write of a server that is closed soon
+after its call would never land, and would fail silently. `SIGTERM` therefore drains what is already
+in flight, capped at 1.5s so it stays inside the window before the client escalates to `SIGKILL`.
+That is the only wait in the whole path, and the response is long gone by then.
+
 ## Design
 
 The server is a passthrough. It does not interpret the response, reshape it, or summarise it — the
