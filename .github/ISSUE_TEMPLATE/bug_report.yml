@@ -1,0 +1,51 @@
+name: Bug report
+description: Something the server does that it should not, or does not do that it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please check the [troubleshooting section](https://github.com/CodeCampusCo/jev-mcp#troubleshooting)
+        first. It covers the server not starting, `dist/index.js` missing, and an empty Axiom dataset.
+
+        For anything security-shaped, do not file here: see [SECURITY.md](https://github.com/CodeCampusCo/jev-mcp/blob/main/SECURITY.md).
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you expected instead, and the exact error text if there was one.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: >
+        The call that triggered it. Redact your state if it is sensitive, but keep the shape:
+        a question with no criteria behaves differently from one with them.
+      render: json
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node version
+      description: "`node --version`, plus the Node your agent launches the server with, if it differs."
+      placeholder: v22.23.1
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: MCP client
+      description: Which agent is calling the tool, and its version.
+      placeholder: Claude Code 2.0.0
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: jev-mcp version
+      description: The commit you are on, from `git rev-parse --short HEAD`.
+    validations:
+      required: true

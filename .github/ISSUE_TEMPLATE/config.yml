@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Setup and troubleshooting
+    url: https://github.com/CodeCampusCo/jev-mcp#troubleshooting
+    about: The server not starting, a missing dist/, or nothing arriving in Axiom.
+  - name: Report a vulnerability
+    url: https://github.com/CodeCampusCo/jev-mcp/security/advisories/new
+    about: Privately, never as a public issue.
