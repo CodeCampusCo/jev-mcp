@@ -3,6 +3,23 @@
   "version": "0.1.0",
   "description": "MCP server exposing one tool: ask Jev a typed question and get a short answer back.",
   "license": "MIT",
+  "author": "CodeCampus",
+  "homepage": "https://github.com/CodeCampusCo/jev-mcp#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CodeCampusCo/jev-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/CodeCampusCo/jev-mcp/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "jev",
+    "typesafe",
+    "classification",
+    "agent"
+  ],
   "type": "module",
   "bin": {
     "jev-mcp": "dist/index.js"
@@ -15,7 +32,8 @@
   },
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "test": "npm run build && node --test test/*.test.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0"
