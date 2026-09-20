@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 try {
     process.loadEnvFile(join(dirname(fileURLToPath(import.meta.url)), "..", ".env"));
 } catch (error) {
-    // Not ENOENT — including a Node < 20.12 TypeError, which carries no `code`.
+    // Not ENOENT, including a Node < 20.12 TypeError, which carries no `code`.
     // Swallowing that one makes the key check below blame the user for a file
     // they did write.
     if ((error as NodeJS.ErrnoException)?.code !== "ENOENT") throw error;

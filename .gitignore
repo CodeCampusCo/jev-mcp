@@ -3,7 +3,7 @@ dist/
 .env
 *.log
 
-# Scratch notes, plans, premortems — not part of the repo
+# Scratch notes, plans, premortems: not part of the repo
 NOTES.md
 PLAN.md
 PLANS/
