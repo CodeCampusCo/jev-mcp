@@ -26,3 +26,17 @@ jobs:
       - run: npm ci
       # Builds, then runs the suite. No API key needed: the tests stub fetch.
       - run: npm test
+
+  # The one check to require in branch protection. The matrix job names carry
+  # the Node versions, so pinning those means a required check stops reporting
+  # the day the matrix changes, and every PR blocks on a job that will never run
+  # again. This name does not move.
+  ci:
+    needs: test
+    # Without this the job is skipped when a test job fails, and branch
+    # protection counts a skipped required check as a pass.
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail unless every test job passed
+        run: '[ "${{ needs.test.result }}" = "success" ]'
